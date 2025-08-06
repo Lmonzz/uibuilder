@@ -2,28 +2,31 @@
 /**
  * @type {any}
  */
-let uibuilder;
+var uibuilder;
 
 uibuilder.start();
 uibuilder.onChange('msg', msg => {
     document.getElementById('status').innerText = msg.payload;
 });
 
-let nodes = [], connections = [], currentGate = null;
+let nodes = [], connections = [], currentNode = null;
 
+// ─── RENDER ────────────────────────────────────────────────────────────────
 function render() {
-    // Render nodes
     const ul = document.getElementById('nodesList');
     ul.innerHTML = '';
     nodes.forEach(n => {
         const li = document.createElement('li');
-        const extra = n.gateType ? `(${n.gateType.toUpperCase()})` :
-            n.payload !== undefined ? `payload=${n.payload}` : '';
-        li.innerHTML = `${n.label} - ${n.type} ${extra}`;
-        if (n.type === 'gate' && Array.isArray(n.rules)) {
-            li.innerHTML += ` [${n.rules.length} rule${n.rules.length > 1 ? 's' : ''}]`;
+        let extra = '';
+        if (n.type.endsWith('-gate') || n.type === 'gate') {
+            extra = `[${n.rules.length} rules] → topic="${n.outputTopic||''}"`;
+        } else if (n.type === 'switch') {
+            extra = `[${n.rules.length} rules] → outputs=${n.outputs}`;
+        } else if (n.type === 'inject') {
+            extra = `payload=${n.payload}`;
         }
-        if (n.type === 'gate') {
+        li.innerText = `${n.label} (${n.type}) ${extra}`;
+        if (n.type === 'switch' || n.type.endsWith('-gate') || n.type === 'gate') {
             const btn = document.createElement('button');
             btn.innerText = 'Configure';
             btn.onclick = () => openConfigPanel(n.label);
@@ -32,49 +35,78 @@ function render() {
         ul.appendChild(li);
     });
 
-    // Render select options
-    const selFrom = document.getElementById('fromNode');
-    const selTo = document.getElementById('toNode');
-    [selFrom, selTo].forEach(sel => {
+    ['fromNode','toNode'].forEach(id => {
+        const sel = document.getElementById(id);
         sel.innerHTML = '';
         nodes.forEach(n => {
             const opt = document.createElement('option');
-            opt.value = n.label;
-            opt.text = n.label;
+            opt.value = n.label; opt.text = n.label;
             sel.appendChild(opt);
         });
     });
 
-    // Render connections
     const cl = document.getElementById('connectionsList');
     cl.innerHTML = '';
-    connections.forEach((c, i) => {
+    connections.forEach(c => {
         const li = document.createElement('li');
         li.innerText = `${c.from} → ${c.to}`;
         cl.appendChild(li);
     });
 
-    // Render JSON preview
-    document.getElementById('jsonPreview').innerText = JSON.stringify({ nodes, connections }, null, 2);
+    document.getElementById('jsonPreview').innerText =
+        JSON.stringify({ nodes, connections },null,2);
 }
 
+// ─── NODE CREATORS ──────────────────────────────────────────────────────────
 function addInject() {
-    const label = 'Inject_' + (nodes.filter(n => n.type === 'inject').length + 1);
-    const payload = confirm("Payload TRUE? Click OK for true, Cancel for false.");
-    nodes.push({ type: 'inject', payload, label });
+    if (!confirm("Add Inject?")) return;
+    const label = `Inject_${nodes.filter(n=>n.type==='inject').length+1}`;
+    const payload = confirm("Payload TRUE? OK=true,Cancel=false");
+    nodes.push({type:'inject',label,payload});
     render();
 }
+
+function addSwitch() {
+    if (!confirm("Add Switch?")) return;
+    const label = `Switch_${nodes.filter(n=>n.type==='switch').length+1}`;
+    nodes.push({type:'switch',label,property:'',rules:[],outputs:1});
+    render();
+}
+
 function addGate() {
-    const label = 'Gate_' + (nodes.filter(n => n.type === 'gate').length + 1);
+    // Ask AND or OR
     const gateType = prompt("Gate type: and / or", "and");
-    const inputs = [];
-    nodes.push({ type: 'gate', gateType, inputs, label });
+    if (gateType === null) {
+        // User hit Cancel
+        return;
+    }
+    // Normalize input
+    const typeLower = gateType.trim().toLowerCase();
+    if (typeLower !== 'and' && typeLower !== 'or') {
+        alert("Invalid gate type. Please enter 'and' or 'or'.");
+        return;
+    }
+
+    // Use type 'and-gate' or 'or-gate' for compatibility with Node-RED and UI
+    const nodeType = typeLower + '-gate';
+    const label = `Gate_${nodes.filter(n => n.type === nodeType).length + 1}`;
+    nodes.push({
+        type: nodeType,
+        label,
+        gateType: typeLower,    // "and" or "or"
+        rules: [],
+        outputTopic: '',
+        emitOnlyIfTrue: false
+    });
     render();
 }
+
 function addDebug() {
+    if (!confirm("Add a new Debug node?")) {
+        return;
+    }
     const label = 'Debug_' + (nodes.filter(n => n.type === 'debug').length + 1);
-    const inputs = [];
-    nodes.push({ type: 'debug', inputs, label });
+    nodes.push({ type: 'debug', inputs: [], label });
     render();
 }
 function clearPreview() {
@@ -95,98 +127,283 @@ function addConnectionFromDropdown() {
     connections.push({ from, to });
     render();
 }
-function sendConfig() {
-    uibuilder.send({ nodes, connections });
-}
+function sendConfig() { uibuilder.send({nodes,connections}); }
 
-// Gate config panel
-function openConfigPanel(label) {
-    currentGate = nodes.find(n => n.label === label && n.type === 'gate');
-    if (!currentGate) return;
-    document.getElementById('configLabel').innerText = `Configuring ${label}`;
-    document.getElementById('ruleForm').innerHTML = '';
-    (currentGate.rules || []).forEach(rule => addRuleRow(rule));
-    document.getElementById('configPanel').style.display = 'block';
-}
-function addRuleRow(rule = {}) {
+// ─── CONFIG PANEL ──────────────────────────────────────────────────────────
+function openConfigPanel(label){
+    currentNode = nodes.find(n=>n.label===label);
+    if(!currentNode) return;
+    document.getElementById('configLabel').innerText =
+        `Configuring ${label} (${currentNode.type})`;
     const form = document.getElementById('ruleForm');
-    const div = document.createElement('div');
-    div.innerHTML = `
-        <input class="prop" placeholder="property" value="${rule.property || ''}">
-        <select class="t">
-            <option value="eq"${rule.t === 'eq' ? ' selected' : ''}>eq</option>
-            <option value="lt"${rule.t === 'lt' ? ' selected' : ''}>lt</option>
-            <option value="lte"${rule.t === 'lte' ? ' selected' : ''}>lte</option>
-            <option value="gt"${rule.t === 'gt' ? ' selected' : ''}>gt</option>
-            <option value="gte"${rule.t === 'gte' ? ' selected' : ''}>gte</option>
-            <option value="neq"${rule.t === 'neq' ? ' selected' : ''}>neq</option>
-        </select>
-        <input class="val" placeholder="value" value="${rule.v || ''}">
-        <select class="vt">
-            <option value="str"${rule.vt === 'str' ? ' selected' : ''}>str</option>
-            <option value="num"${rule.vt === 'num' ? ' selected' : ''}>num</option>
-            <option value="bool"${rule.vt === 'bool' ? ' selected' : ''}>bool</option>
-            <option value="prev"${rule.vt === 'prev' ? ' selected' : ''}>prev</option>
-        </select>
+    form.innerHTML = '';
+
+    if (currentNode.type === 'switch') {
+        // 1) Top-level property field
+        form.innerHTML += `
+      <div>
+        <label>Property to test:</label>
+        <input id="switchProp" value="${currentNode.property}">
+      </div>
     `;
-    form.appendChild(div);
-    const propInput = div.querySelector('.prop');
-    const valInput = div.querySelector('.val');
-    const vtSelect = div.querySelector('.vt');
-    function handlePrevMode() {
-        if (vtSelect.value === 'prev') {
-            propInput.value = 'payload';
-            propInput.disabled = true;
-            valInput.value = '';
-            valInput.disabled = true;
-        } else {
-            propInput.disabled = false;
-            valInput.disabled = false;
+
+        // 2) Existing rule rows
+        currentNode.rules.forEach(rule => addSwitchRuleRow(rule));
+
+        // 3) Wire Outputs header
+        form.innerHTML += `<hr><h4>Wire Outputs</h4>`;
+
+        // 4) Always show at least one output select (even if no rules yet)
+        const numOutputs = Math.max(currentNode.rules.length, 1);
+        for (let i = 0; i < numOutputs; i++) {
+            const row = document.createElement('div');
+            row.innerHTML = `
+        <label>Output ${i + 1} →</label>
+        <select id="wire_${i}">
+          <option value="">— none —</option>
+        </select>
+      `;
+            form.appendChild(row);
+
+            // populate dropdown
+            const sel = row.querySelector('select');
+            nodes
+                .filter(n2 => n2.label !== currentNode.label)
+                .forEach(n2 => {
+                    const opt = document.createElement('option');
+                    opt.value = n2.label;
+                    opt.text  = n2.label;
+                    // pre-select if already wired
+                    const exists = connections.find(c =>
+                        c.from === currentNode.label &&
+                        c.outputIndex === i &&
+                        c.to === n2.label
+                    );
+                    if (exists) opt.selected = true;
+                    sel.appendChild(opt);
+                });
         }
     }
-    vtSelect.addEventListener('change', handlePrevMode);
-    handlePrevMode();
+    else {
+        // Gate
+        form.innerHTML += `
+      <div><label>Output Topic:</label>
+        <input id="gateTopic" value="${currentNode.outputTopic||''}">
+      </div>
+      <div><label>Emit Only If True:</label>
+        <input id="gateEmit" type="checkbox"${currentNode.emitOnlyIfTrue?' checked':''}>
+      </div>`;
+        currentNode.rules.forEach(r=> addGateRuleRow(r));
+    }
+    document.getElementById('configPanel').style.display='block';
 }
-function saveConfig() {
-    if (!currentGate) return;
+
+// ─── GATE RULES ─────────────────────────────────────────────────────────────
+function addGateRuleRow(rule={}){
+    const form=document.getElementById('ruleForm'),
+        div=document.createElement('div');
+    div.classList.add('gate-rule');
+    div.innerHTML=`
+    <input class="prop" placeholder="property" value="${rule.property||''}">
+    <input class="topic" placeholder="topic"    value="${rule.topic||''}">
+    <select class="t">
+      <option value="eq"${rule.t==='eq'?' selected':''}>eq</option>
+      <option value="lt"${rule.t==='lt'?' selected':''}>lt</option>
+      <option value="lte"${rule.t==='lte'?' selected':''}>lte</option>
+      <option value="gt"${rule.t==='gt'?' selected':''}>gt</option>
+      <option value="gte"${rule.t==='gte'?' selected':''}>gte</option>
+      <option value="neq"${rule.t==='neq'?' selected':''}>neq</option>
+      <option value="btwn"${rule.t==='btwn'?' selected':''}>between</option>
+      <option value="jsonata_exp"${rule.t==='jsonata_exp'?' selected':''}>JSONata</option>
+    </select>
+    <input class="val1" placeholder="value1" value="${rule.v||''}">
+    <select class="vt1">
+      <option value="str"${rule.vt==='str'?' selected':''}>str</option>
+      <option value="num"${rule.vt==='num'?' selected':''}>num</option>
+      <option value="bool"${rule.vt==='bool'?' selected':''}>bool</option>
+      <option value="jsonata"${rule.vt==='jsonata'?' selected':''}>JSONata</option>
+    </select>
+    <input class="val2" placeholder="value2" value="${rule.v2||''}" style="display:none">
+    <select class="vt2" style="display:none">
+      <option value="str"${rule.v2t==='str'?' selected':''}>str</option>
+      <option value="num"${rule.v2t==='num'?' selected':''}>num</option>
+    </select>
+    <button class="removeRuleBtn">✕</button>`;
+    form.appendChild(div);
+
+    const t=div.querySelector('.t'),
+        v1=div.querySelector('.val1'),
+        vt1=div.querySelector('.vt1'),
+        v2=div.querySelector('.val2'),
+        vt2=div.querySelector('.vt2'),
+        rem=div.querySelector('.removeRuleBtn');
+
+    function upd(){
+        const bt=(t.value==='btwn');
+        v2.style.display=bt?'inline-block':'none';
+        vt2.style.display=bt?'inline-block':'none';
+        if(t.value==='jsonata_exp'){
+            vt1.value='jsonata'; v1.placeholder='JSONata expr';
+        } else {
+            if(vt1.value==='jsonata') vt1.value='str';
+            v1.placeholder='value1';
+        }
+    }
+    t.onchange=upd; upd();
+    rem.onclick=()=>div.remove();
+}
+
+function saveGateConfig(){
+    const form=document.getElementById('ruleForm'),
+        topicIn=document.getElementById('gateTopic'),
+        emitIn =document.getElementById('gateEmit');
+
+    currentNode.outputTopic = topicIn.value;
+    currentNode.emitOnlyIfTrue = emitIn.checked;
+
+    const rules=[];
+    form.querySelectorAll('.gate-rule').forEach(div=>{
+        const p =div.querySelector('.prop').value,
+            tp=div.querySelector('.topic').value,
+            t =div.querySelector('.t').value,
+            v1=div.querySelector('.val1').value,
+            vt1=div.querySelector('.vt1').value;
+        const r={ property:p, propertyType:'msg', topic:tp, t, v:v1, vt:vt1 };
+        if(t==='btwn'){
+            r.v2=div.querySelector('.val2').value;
+            r.v2t=div.querySelector('.vt2').value;
+        }
+        rules.push(r);
+    });
+    currentNode.rules=rules;
+}
+
+// ─── SWITCH RULES ───────────────────────────────────────────────────────────
+function addSwitchRuleRow(rule={}){
+    const form=document.getElementById('ruleForm'),
+        div=document.createElement('div');
+    div.classList.add('switch-rule');
+    div.innerHTML=`
+    <select class="t">
+      <option value="eq"${rule.t==='eq'?' selected':''}>==</option>
+      <option value="lt"${rule.t==='lt'?' selected':''}><</option>
+      <option value="lte"${rule.t==='lte'?' selected':''}>&le;</option>
+      <option value="gt"${rule.t==='gt'?' selected':''}>></option>
+      <option value="gte"${rule.t==='gte'?' selected':''}>&ge;</option>
+      <option value="neq"${rule.t==='neq'?' selected':''}>!=</option>
+      <option value="btwn"${rule.t==='btwn'?' selected':''}>between</option>
+      <option value="jsonata_exp"${rule.t==='jsonata_exp'?' selected':''}>JSONata</option>
+    </select>
+    <input class="val1" placeholder="value1" value="${rule.v||''}">
+    <select class="vt1">
+      <option value="str"${rule.vt==='str'?' selected':''}>str</option>
+      <option value="num"${rule.vt==='num'?' selected':''}>num</option>
+      <option value="bool"${rule.vt==='bool'?' selected':''}>bool</option>
+      <option value="jsonata"${rule.vt==='jsonata'?' selected':''}>JSONata</option>
+    </select>
+    <input class="val2" placeholder="value2" value="${rule.v2||''}" style="display:none">
+    <select class="vt2" style="display:none">
+      <option value="str"${rule.v2t==='str'?' selected':''}>str</option>
+      <option value="num"${rule.v2t==='num'?' selected':''}>num</option>
+    </select>
+    <button class="removeRuleBtn">✕</button>`;
+    form.appendChild(div);
+
+    const t=div.querySelector('.t'),
+        v1=div.querySelector('.val1'),
+        vt1=div.querySelector('.vt1'),
+        v2=div.querySelector('.val2'),
+        vt2=div.querySelector('.vt2'),
+        rem=div.querySelector('.removeRuleBtn');
+
+    function upd(){
+        const bt=(t.value==='btwn');
+        v2.style.display=bt?'inline-block':'none';
+        vt2.style.display=bt?'inline-block':'none';
+        if(t.value==='jsonata_exp'){
+            vt1.value='jsonata'; v1.placeholder='JSONata expr';
+        } else {
+            if(vt1.value==='jsonata') vt1.value='str';
+            v1.placeholder='value1';
+        }
+    }
+    t.onchange=upd; upd();
+    rem.onclick=()=>div.remove();
+}
+
+function saveSwitchConfig() {
+    // 1) Grab the top‐level Property
+    const propIn = document.getElementById('switchProp');
+    currentNode.property = propIn.value;
+
+    // 2) Rebuild the rules array
     const form = document.getElementById('ruleForm');
     const rules = [];
-    Array.from(form.children).forEach(function (div) {
-        // Convert NodeList to Array and use indexing for destructuring
-        const inputs = Array.from(div.querySelectorAll('input, select'));
-        const propertyInput = inputs[0];
-        const tSelect = inputs[1];
-        const valueInput = inputs[2];
-        const vtSelect = inputs[3];
-        rules.push({
-            property: propertyInput.value,
-            propertyType: "flow",
-            t: tSelect.value,
-            v: valueInput.value,
-            vt: vtSelect.value
-        });
+    form.querySelectorAll('.switch-rule').forEach(div => {
+        const t   = div.querySelector('.t').value;
+        const v1  = div.querySelector('.val1').value;
+        const vt1 = div.querySelector('.vt1').value;
+        const rule = {
+            property: currentNode.property,
+            propertyType: 'msg',
+            t,
+            v: v1,
+            vt: vt1
+        };
+        if (t === 'btwn') {
+            rule.v2  = div.querySelector('.val2').value;
+            rule.v2t = div.querySelector('.vt2').value;
+        }
+        rules.push(rule);
     });
-    currentGate.rules = rules;
-    closeConfigPanel();
-    render();
+    currentNode.rules   = rules;
+    currentNode.outputs = rules.length;  // auto‐derive outputs
+
+    // 3) Rebuild connections for this switch
+    //    Remove any old switch→* links
+    connections = connections.filter(c => c.from !== currentNode.label);
+
+    //    For each output dropdown, if non‐empty, push a connection
+    rules.forEach((_, i) => {
+        const sel = document.getElementById(`wire_${i}`);
+        if (sel && sel.value) {
+            connections.push({
+                from:        currentNode.label,
+                to:          sel.value,
+                outputIndex: i
+            });
+        }
+    });
 }
 
-function closeConfigPanel() {
-    document.getElementById('configPanel').style.display = 'none';
-    currentGate = null;
+// ─── SAVE/CLOSE DISPATCH ───────────────────────────────────────────────────
+function saveConfig(){
+    if(!currentNode) return;
+    if(currentNode.type==='switch') saveSwitchConfig();
+    else                              saveGateConfig();
+    closeConfigPanel(); render();
 }
 
-// Bind UI events on DOMContentLoaded
-document.addEventListener('DOMContentLoaded', function() {
+function closeConfigPanel(){
+    document.getElementById('configPanel').style.display='none';
+    currentNode=null;
+}
+
+// ─── BIND EVENTS ───────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('addInjectBtn').onclick = addInject;
-    document.getElementById('addGateBtn').onclick = addGate;
-    document.getElementById('addDebugBtn').onclick = addDebug;
+    document.getElementById('addGateBtn').onclick   = ()=>addGate('and-gate');
+    document.getElementById('addDebugBtn').onclick  = addDebug;
+    document.getElementById('addSwitchBtn').onclick = addSwitch;
     document.getElementById('addConnectionBtn').onclick = addConnectionFromDropdown;
-    document.getElementById('clearPreviewBtn').onclick = clearPreview;
-    document.getElementById('clearAllBtn').onclick = clearAll;
-    document.getElementById('sendConfigBtn').onclick = sendConfig;
-    document.getElementById('addRuleRowBtn').onclick = () => addRuleRow();
-    document.getElementById('saveConfigBtn').onclick = saveConfig;
+    document.getElementById('clearPreviewBtn').onclick   = clearPreview;
+    document.getElementById('clearAllBtn').onclick       = clearAll;
+    document.getElementById('sendConfigBtn').onclick     = sendConfig;
+    document.getElementById('addRuleRowBtn').onclick     = ()=>{
+        if(currentNode?.type==='switch') addSwitchRuleRow();
+        else                              addGateRuleRow();
+    };
+    document.getElementById('saveConfigBtn').onclick  = saveConfig;
     document.getElementById('closeConfigPanelBtn').onclick = closeConfigPanel;
     render();
 });
