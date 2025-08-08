@@ -15,36 +15,70 @@
 
     <!-- UIBUILDER Core - Paths now match the uibuilder URL -->
     <script defer src="/test/uibuilder.iife.min.js"></script>
-
 </head>
 
 <body>
-    <h1>Create condition(s)</h1>
+    <!-- ─── TRIGGER/EVENT SECTION ───────────────────────────── -->
+    <h1>Event Trigger</h1>
+    <div id="triggerSection" style="margin-bottom:2em; border:1px solid #ccc; padding:1em;">
+        <div class="trigger-grid">
+            <div class="trigger-label">
+                <label for="triggerName"><b>Trigger Name:</b> <span style="color:red">*</span></label>
+            </div>
+            <div class="trigger-input">
+                <input id="triggerName" type="text" placeholder="e.g. Receive Alert" required>
+            </div>
 
-    <!-- Controls -->
-    <button id="addInjectBtn">Add Inject</button>
-    <button id="addGateBtn">Add Gate</button>
-    <button id="addDebugBtn">Add Debug</button>
-    <button id="addSwitchBtn">Add Switch</button>
+            <div class="trigger-label">
+                <label for="triggerDesc"><b>Description:</b></label>
+            </div>
+            <div class="trigger-input">
+                <input id="triggerDesc" type="text" placeholder="Describe this trigger...">
+            </div>
 
-    <h2>Connect Nodes</h2>
-    <div>
-        <select id="fromNode"></select> →
-        <select id="toNode"></select>
-        <button id="addConnectionBtn">Add Connection</button>
+            <div class="trigger-label">
+                <label for="triggerWhen"><b>When:</b></label>
+            </div>
+            <div class="trigger-input">
+                <select id="triggerWhen">
+                    <option value="">-- Select trigger --</option>
+                    <option value="receive_alert">Receive alert</option>
+                    <!-- Add more options here as needed -->
+                </select>
+            </div>
+        </div>
     </div>
+    <!-- ─────────────────────────────────────────────────────── -->
 
-    <!-- Nodes Preview -->
-    <h2>Nodes</h2>
-    <ul id="nodesList"></ul>
+    <!-- ─── CREATE CONDITIONS SECTION ───────────────────────── -->
+    <h1>Create Condition(s)</h1>
+    <div id="conditionSection" style="margin-bottom:2em; border:1px solid #ccc; padding:1em;">
+        <!-- Controls -->
+        <button id="addInjectBtn">Add Inject</button>
+        <button id="addGateBtn">Add Gate</button>
+        <button id="addDebugBtn">Add Debug</button>
+        <button id="addSwitchBtn">Add Switch</button>
 
-    <!-- Connections Preview -->
-    <h2>Connections</h2>
-    <ul id="connectionsList"></ul>
+        <h2>Connect Nodes</h2>
+        <div>
+            <select id="fromNode"></select> →
+            <select id="toNode"></select>
+            <button id="addConnectionBtn">Add Connection</button>
+        </div>
+
+        <!-- Nodes Preview -->
+        <h2>Nodes</h2>
+        <ul id="nodesList"></ul>
+
+        <!-- Connections Preview -->
+        <h2>Connections</h2>
+        <ul id="connectionsList"></ul>
+    </div>
+    <!-- ─────────────────────────────────────────────────────── -->
 
     <!-- JSON Preview -->
     <h2>Flow JSON Preview</h2>
-    <pre id="jsonPreview" style="background:#eee;padding:1em;"></pre>
+    <pre id="jsonPreview" style="background:#eee;padding:1em; height:300px; overflow:auto;"></pre>
 
     <!-- Clear options -->
     <button id="clearPreviewBtn">Clear JSON Preview</button>
