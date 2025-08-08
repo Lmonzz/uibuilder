@@ -2,3 +2,54 @@
  * This is optional but reasonably complete and allows for light/dark mode switching.
  */
 @import url("../uibuilder/uib-brand.min.css");
+
+/* Prevent red border on required/invalid input for trigger name */
+#triggerName:invalid {
+    box-shadow: none !important;
+    border-color: #ccc !important;
+}
+
+.trigger-row {
+    display: flex;
+    gap: 2em;
+    align-items: flex-end;
+}
+
+.trigger-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 220px;
+    margin-right: 0.5em;
+}
+
+.trigger-grid {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    row-gap: 1em;
+    column-gap: 1em;
+    align-items: center;
+}
+
+.trigger-label {
+    text-align: right;
+    padding-right: 0.5em;
+}
+
+.trigger-input input,
+.trigger-input select {
+    width: 100%;
+    max-width: 350px;
+    box-sizing: border-box;
+}
+
+#jsonPreview {
+    background: #eee;
+    padding: 1em;
+    height: 300px;
+    overflow: auto;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 1em;
+    font-family: monospace;
+    margin-bottom: 1em;
+}

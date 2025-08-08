@@ -57,19 +57,24 @@ function render() {
         JSON.stringify({ nodes, connections },null,2);
 }
 
+// Helper to generate unique IDs for all nodes
+function makeId(prefix) {
+    return prefix + "_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+}
+
 // ─── NODE CREATORS ──────────────────────────────────────────────────────────
 function addInject() {
     if (!confirm("Add Inject?")) return;
     const label = `Inject_${nodes.filter(n=>n.type==='inject').length+1}`;
     const payload = confirm("Payload TRUE? OK=true,Cancel=false");
-    nodes.push({type:'inject',label,payload});
+    nodes.push({id: makeId('inject'), type:'inject',label,payload});
     render();
 }
 
 function addSwitch() {
     if (!confirm("Add Switch?")) return;
     const label = `Switch_${nodes.filter(n=>n.type==='switch').length+1}`;
-    nodes.push({type:'switch',label,property:'',rules:[],outputs:1});
+    nodes.push({id: makeId('switch'), type:'switch',label,property:'',rules:[],outputs:1});
     render();
 }
 
@@ -87,10 +92,12 @@ function addGate() {
         return;
     }
 
-    // Use type 'and-gate' or 'or-gate' for compatibility with Node-RED and UI
+    // Always increment Gate_x regardless of gate type
+    const gateCount = nodes.filter(n => n.label && n.label.startsWith('Gate_')).length;
+    const label = `Gate_${gateCount + 1}`;
     const nodeType = typeLower + '-gate';
-    const label = `Gate_${nodes.filter(n => n.type === nodeType).length + 1}`;
     nodes.push({
+        id: makeId(nodeType),
         type: nodeType,
         label,
         gateType: typeLower,    // "and" or "or"
@@ -106,7 +113,7 @@ function addDebug() {
         return;
     }
     const label = 'Debug_' + (nodes.filter(n => n.type === 'debug').length + 1);
-    nodes.push({ type: 'debug', inputs: [], label });
+    nodes.push({ id: makeId('debug'), type: 'debug', inputs: [], label });
     render();
 }
 function clearPreview() {
@@ -185,7 +192,7 @@ function openConfigPanel(label){
         }
     }
     else {
-        // Gate
+        // Gate config panel
         form.innerHTML += `
       <div><label>Output Topic:</label>
         <input id="gateTopic" value="${currentNode.outputTopic||''}">
@@ -199,13 +206,12 @@ function openConfigPanel(label){
 }
 
 // ─── GATE RULES ─────────────────────────────────────────────────────────────
-function addGateRuleRow(rule={}){
-    const form=document.getElementById('ruleForm'),
-        div=document.createElement('div');
+function addGateRuleRow(rule={}) {
+    const form = document.getElementById('ruleForm'),
+        div = document.createElement('div');
     div.classList.add('gate-rule');
-    div.innerHTML=`
+    div.innerHTML = `
     <input class="prop" placeholder="property" value="${rule.property||''}">
-    <input class="topic" placeholder="topic"    value="${rule.topic||''}">
     <select class="t">
       <option value="eq"${rule.t==='eq'?' selected':''}>eq</option>
       <option value="lt"${rule.t==='lt'?' selected':''}>lt</option>
@@ -214,14 +220,13 @@ function addGateRuleRow(rule={}){
       <option value="gte"${rule.t==='gte'?' selected':''}>gte</option>
       <option value="neq"${rule.t==='neq'?' selected':''}>neq</option>
       <option value="btwn"${rule.t==='btwn'?' selected':''}>between</option>
-      <option value="jsonata_exp"${rule.t==='jsonata_exp'?' selected':''}>JSONata</option>
     </select>
     <input class="val1" placeholder="value1" value="${rule.v||''}">
     <select class="vt1">
       <option value="str"${rule.vt==='str'?' selected':''}>str</option>
       <option value="num"${rule.vt==='num'?' selected':''}>num</option>
       <option value="bool"${rule.vt==='bool'?' selected':''}>bool</option>
-      <option value="jsonata"${rule.vt==='jsonata'?' selected':''}>JSONata</option>
+      <option value="prev"${rule.vt==='prev'?' selected':''}>prev</option>
     </select>
     <input class="val2" placeholder="value2" value="${rule.v2||''}" style="display:none">
     <select class="vt2" style="display:none">
@@ -231,26 +236,40 @@ function addGateRuleRow(rule={}){
     <button class="removeRuleBtn">✕</button>`;
     form.appendChild(div);
 
-    const t=div.querySelector('.t'),
-        v1=div.querySelector('.val1'),
-        vt1=div.querySelector('.vt1'),
-        v2=div.querySelector('.val2'),
-        vt2=div.querySelector('.vt2'),
-        rem=div.querySelector('.removeRuleBtn');
+    const t = div.querySelector('.t'),
+        v1 = div.querySelector('.val1'),
+        vt1 = div.querySelector('.vt1'),
+        v2 = div.querySelector('.val2'),
+        vt2 = div.querySelector('.vt2'),
+        prop = div.querySelector('.prop'),
+        rem = div.querySelector('.removeRuleBtn');
 
-    function upd(){
-        const bt=(t.value==='btwn');
-        v2.style.display=bt?'inline-block':'none';
-        vt2.style.display=bt?'inline-block':'none';
-        if(t.value==='jsonata_exp'){
-            vt1.value='jsonata'; v1.placeholder='JSONata expr';
+    function upd() {
+        const bt = (t.value === 'btwn');
+        v2.style.display = bt ? 'inline-block' : 'none';
+        vt2.style.display = bt ? 'inline-block' : 'none';
+        // If vt1 is 'prev', set property to 'payload', disable and grey out property and value
+        if (vt1.value === 'prev') {
+            prop.value = 'payload';
+            prop.disabled = true;
+            prop.style.background = '#eee';
+            v1.disabled = true;
+            v1.style.background = '#eee';
         } else {
-            if(vt1.value==='jsonata') vt1.value='str';
-            v1.placeholder='value1';
+            // Only restore property if not prev
+            if (prop.disabled) {
+                prop.value = rule.property || '';
+            }
+            prop.disabled = false;
+            prop.style.background = '';
+            v1.disabled = false;
+            v1.style.background = '';
         }
     }
-    t.onchange=upd; upd();
-    rem.onclick=()=>div.remove();
+    t.onchange = upd;
+    vt1.onchange = upd;
+    upd();
+    rem.onclick = () => div.remove();
 }
 
 function saveGateConfig(){
@@ -263,12 +282,14 @@ function saveGateConfig(){
 
     const rules=[];
     form.querySelectorAll('.gate-rule').forEach(div=>{
-        const p =div.querySelector('.prop').value,
-            tp=div.querySelector('.topic').value,
-            t =div.querySelector('.t').value,
-            v1=div.querySelector('.val1').value,
-            vt1=div.querySelector('.vt1').value;
-        const r={ property:p, propertyType:'msg', topic:tp, t, v:v1, vt:vt1 };
+        let p = div.querySelector('.prop').value,
+            t = div.querySelector('.t').value,
+            v1 = div.querySelector('.val1').value,
+            vt1 = div.querySelector('.vt1').value;
+        // Always set propertyType to 'flow' for gates
+        // If vt1 is 'prev', force property to 'payload'
+        if (vt1 === 'prev') p = 'payload';
+        const r={ property:p, propertyType:'flow', t, v:v1, vt:vt1 };
         if(t==='btwn'){
             r.v2=div.querySelector('.val2').value;
             r.v2t=div.querySelector('.vt2').value;
@@ -380,13 +401,84 @@ function saveSwitchConfig() {
 function saveConfig(){
     if(!currentNode) return;
     if(currentNode.type==='switch') saveSwitchConfig();
-    else                              saveGateConfig();
+    else if(currentNode.type.endsWith('-gate') || currentNode.type === 'gate') saveGateConfig();
     closeConfigPanel(); render();
 }
 
 function closeConfigPanel(){
     document.getElementById('configPanel').style.display='none';
     currentNode=null;
+}
+
+// ─── HELPER FUNCTIONS ──────────────────────────────────────────────────────
+// Helper to check if the receive alert trigger nodes already exist
+function hasReceiveAlertNodes() {
+    return nodes.some(n => n.type === 'http in' && n.label === 'Receive alert') &&
+           nodes.some(n => n.type === 'function' && n.label === 'extract api data');
+}
+
+// Helper to add the receive alert trigger nodes
+function addReceiveAlertNodes() {
+    // Only add if not already present
+    if (hasReceiveAlertNodes()) return;
+
+    const httpInId = makeId("httpin");
+    const funcId = makeId("func");
+
+    // Add the function node first (extract api data)
+    nodes.push({
+        id: funcId,
+        type: "function",
+        label: "extract api data",
+        name: "extract api data",
+        func: `const alert = msg.payload || {};\nmsg.message = alert.message || "No message";\nmsg.timestamp = alert.timestamp || new Date().toISOString();\nmsg.cameraName = alert.cameraName;\nmsg.area = alert.area;\nmsg.temperature = alert.temperature;\nmsg.humidity = alert.humidity;\n\n// File attributes\nmsg.filedata = Buffer.from(alert.filedata, 'base64');\nmsg.filename = alert.filename;\nmsg.filetype = alert.filetype;\n\n\nreturn msg;`,
+        outputs: 1,
+        timeout: 0,
+        noerr: 0,
+        initialize: "",
+        finalize: "",
+        libs: [],
+        x: 440,
+        y: 280,
+        wires: [[]] // will fill after all nodes are present
+    });
+
+    // Add the http in node, wired to the function node
+    nodes.push({
+        id: httpInId,
+        type: "http in",
+        label: "Receive alert",
+        name: "Receive alert",
+        url: "/receive-alert",
+        method: "post",
+        upload: true,
+        swaggerDoc: "",
+        x: 230,
+        y: 280,
+        wires: [[funcId]]
+    });
+
+    // Now wire the extract api data node to all gate and switch nodes
+    // (do this after both nodes are pushed so all ids are available)
+    function wireExtractNode() {
+        const extractNode = nodes.find(n => n.type === 'function' && n.label === 'extract api data');
+        if (extractNode) {
+            extractNode.wires[0] = nodes
+                .filter(n => n.type === 'gate' || n.type.endsWith('-gate') || n.type === 'switch')
+                .map(n => n.id);
+        }
+    }
+
+    // Wire immediately in case gates/switches already exist
+    wireExtractNode();
+
+    // Also wire after next render in case user adds more gates/switches after
+    setTimeout(() => {
+        wireExtractNode();
+        render();
+    }, 0);
+
+    render();
 }
 
 // ─── BIND EVENTS ───────────────────────────────────────────────────────────
@@ -405,5 +497,20 @@ document.addEventListener('DOMContentLoaded',()=>{
     };
     document.getElementById('saveConfigBtn').onclick  = saveConfig;
     document.getElementById('closeConfigPanelBtn').onclick = closeConfigPanel;
+
+    // Listen for changes to the triggerWhen dropdown
+    const triggerWhen = document.getElementById('triggerWhen');
+    if (triggerWhen) {
+        triggerWhen.addEventListener('change', function() {
+            if (this.value === 'receive_alert') {
+                addReceiveAlertNodes();
+            }
+        });
+        // Trigger on page load if already selected
+        if (triggerWhen.value === 'receive_alert') {
+            addReceiveAlertNodes();
+        }
+    }
+
     render();
 });
