@@ -50,7 +50,7 @@
     </div>
     <!-- ─────────────────────────────────────────────────────── -->
 
-    <!-- ─── CREATE CONDITIONS SECTION ───────────────────────── -->
+
     <h1>Create Condition(s)</h1>
     <div id="conditionSection" style="margin-bottom:2em; border:1px solid #ccc; padding:1em;">
         <!-- Controls -->
@@ -74,6 +74,47 @@
         <h2>Connections</h2>
         <ul id="connectionsList"></ul>
     </div>
+
+    <!-- ─── ACTION SECTION ───────────────────────── -->
+    <h1>Then Do (Action)</h1>
+    <div id="actionSection" style="margin-bottom:2em; border:1px solid #ccc; padding:1em;">
+        <div class="trigger-grid">
+            <div class="trigger-label">
+                <label for="actionSelect"><b>Then do:</b></label>
+            </div>
+            <div class="trigger-input">
+                <select id="actionSelect">
+                    <option value="">-- select action --</option>
+                    <option value="send_email">Send Email</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Email config appears only when Send Email is chosen -->
+        <div id="emailConfig" style="display:none; margin-top:1em;">
+            <div class="trigger-grid">
+                <div class="trigger-label email-only"><label for="emailFrom"><b>Gmail address</b></label></div>
+                <div class="trigger-input">
+                    <input id="emailFrom" type="email" placeholder="you@gmail.com">
+                </div>
+
+                <div class="trigger-label email-only"><label for="emailPass"><b>Password / App password</b></label></div>
+                <div class="trigger-input">
+                    <input id="emailPass" type="password" placeholder="••••••••">
+                </div>
+
+                <div class="trigger-label email-only"><label for="emailTo"><b>To</b></label></div>
+                <div class="trigger-input">
+                    <input id="emailTo" type="text" placeholder="recipient@example.com">
+                </div>
+            </div>
+
+            <div style="margin-top:1em;">
+                <button id="saveEmailActionBtn">Add “Send Email” Action</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ─────────────────────────────────────────────────────── -->
 
     <!-- JSON Preview -->

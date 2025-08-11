@@ -431,7 +431,23 @@ function addReceiveAlertNodes() {
         type: "function",
         label: "extract api data",
         name: "extract api data",
-        func: `const alert = msg.payload || {};\nmsg.message = alert.message || "No message";\nmsg.timestamp = alert.timestamp || new Date().toISOString();\nmsg.cameraName = alert.cameraName;\nmsg.area = alert.area;\nmsg.temperature = alert.temperature;\nmsg.humidity = alert.humidity;\n\n// File attributes\nmsg.filedata = Buffer.from(alert.filedata, 'base64');\nmsg.filename = alert.filename;\nmsg.filetype = alert.filetype;\n\n\nreturn msg;`,
+        func: `
+const alert = msg.payload || {};
+flow.set("message", alert.message || "No message");
+flow.set("timestamp", alert.timestamp || new Date().toISOString());
+flow.set("cameraName", alert.cameraName);
+flow.set("area", alert.area);
+flow.set("temperature", alert.temperature);
+flow.set("humidity", alert.humidity);
+
+// File attributes
+msg.filedata = Buffer.from(alert.filedata, 'base64');
+msg.filename = alert.filename;
+msg.filetype = alert.filetype;
+
+
+return msg;
+        `,
         outputs: 1,
         timeout: 0,
         noerr: 0,
@@ -481,6 +497,61 @@ function addReceiveAlertNodes() {
     render();
 }
 
+let actionConfig = null;
+let credentials = {}; // { [nodeId]: { userid, password } }
+
+function addEmailActionNode(cfg) {
+    const fnId = makeId('func');
+    nodes.push({
+        id: fnId,
+        type: "function",
+        label: "prepare email",
+        name: "prepare email",
+        func:
+            `// Ensure nested objects exist
+msg.smtp = msg.smtp || {};
+msg.smtp.auth = msg.smtp.auth || {};
+msg.smtp.tls = msg.smtp.tls || {};
+
+// SMTP settings (dynamic)
+msg.smtp.host = ${JSON.stringify(cfg.smtpServer || "smtp.gmail.com")};
+msg.smtp.port = ${JSON.stringify(cfg.smtpPort || 587)};                 // number, not string
+msg.smtp.secure = false;             // STARTTLS on 587
+msg.smtp.auth.user = ${JSON.stringify(cfg.userid)};
+msg.smtp.auth.pass = ${JSON.stringify(cfg.password)}; // use a Gmail App Password
+msg.smtp.tls.rejectUnauthorized = false;    // optional
+
+// Email fields (root-level, not inside payload)
+msg.to = ${JSON.stringify(cfg.to)} || "marcusaureliusduo@gmail.com";
+msg.from = ${JSON.stringify(cfg.to)} || "dinhvanloc270303@gmail.com";
+msg.topic = msg.topic || "Alert";                  // subject
+msg.payload = msg.payload || "An alert was received."; // body text
+
+return msg;`,
+        outputs: 1, noerr: 0, initialize: "", finalize: "", libs: [],
+        x: 620, y: 300, wires: [[]]
+    });
+
+    const emailNodeId = makeId('emaildyn');
+    nodes.push({
+        id: emailNodeId,
+        type: "email-dynamic",
+        label: "Send Email (dynamic)",
+        name: "",
+        smtpServer: "",
+        smtpPort: "587",
+        smtpUser: "",
+        smtpPass: "",
+        secure: false,
+        tlsRejectUnauthorized: false,
+        x: 820, y: 300, wires: [[]]
+    });
+
+    const prep = nodes.find(n => n.id === fnId);
+    if (prep) prep.wires = [[emailNodeId]];
+    render();
+}
+
 // ─── BIND EVENTS ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('addInjectBtn').onclick = addInject;
@@ -511,6 +582,43 @@ document.addEventListener('DOMContentLoaded',()=>{
             addReceiveAlertNodes();
         }
     }
+
+    const actionSelect = document.getElementById('actionSelect');
+    const saveEmailActionBtn = document.getElementById('saveEmailActionBtn');
+
+    const emailConfigEl = document.getElementById('emailConfig');
+    function toggleEmail(show) {
+        emailConfigEl.style.display = show ? 'block' : 'none';
+    }
+
+    if (actionSelect) {
+        actionSelect.addEventListener('change', () => {
+            toggleEmail(actionSelect.value === 'send_email');
+        });
+    }
+
+    if (saveEmailActionBtn) {
+        saveEmailActionBtn.addEventListener('click', () => {
+            const userid   = document.getElementById('emailFrom').value.trim();
+            const password = document.getElementById('emailPass').value;
+            const to       = document.getElementById('emailTo').value.trim();
+
+            if (!userid || !password || !to) {
+                alert('Please fill Gmail address, Password/App password, and To.');
+                return;
+            }
+
+            actionConfig = { type: 'send_email', userid, password, to };
+            addEmailActionNode(actionConfig);
+
+            toggleEmail(false);
+            actionSelect.value = '';
+            ['emailFrom','emailPass','emailTo'].forEach(id => {
+                const el = document.getElementById(id); if (el) el.value = '';
+            });
+        });
+    }
+
 
     render();
 });
