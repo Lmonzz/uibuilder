@@ -1,13 +1,4 @@
 // index.js
-/**
- * @type {any}
- */
-var uibuilder;
-
-uibuilder.start();
-uibuilder.onChange('msg', msg => {
-    document.getElementById('status').innerText = msg.payload;
-});
 
 let nodes = [], connections = [], currentNode = null;
 

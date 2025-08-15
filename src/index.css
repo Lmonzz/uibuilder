@@ -1,7 +1,6 @@
 /* Load defaults from `<userDir>/node_modules/node-red-contrib-uibuilder/front-end/uib-brand.min.css`
  * This is optional but reasonably complete and allows for light/dark mode switching.
  */
-@import url("../uibuilder/uib-brand.min.css");
 
 /* Prevent red border on required/invalid input for trigger name */
 #triggerName:invalid {
