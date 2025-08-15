@@ -143,5 +143,67 @@
 
     <!-- Your custom script -->
     <script defer src="./index.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js";
+
+        // Firebase config (must match your service account project)
+        const firebaseConfig = {
+            apiKey: "AIzaSyCZ2Kr_6gWKopc_QIabMb_QWGMmS9Cupzo",
+            authDomain: "connect-to-node-red-74531.firebaseapp.com",
+            projectId: "connect-to-node-red-74531",
+            storageBucket: "connect-to-node-red-74531.appspot.com",
+            messagingSenderId: "747008638747",
+            appId: "1:747008638747:web:d0653f4b5601ee5a7d9dbe"
+        };
+
+        // Init Firebase
+        const app = initializeApp(firebaseConfig);
+        const messaging = getMessaging(app);
+
+        // Register service worker in /test/
+        const swReg = await navigator.serviceWorker.register('/test/firebase-messaging-sw.js');
+        console.log('Service Worker registered', swReg);
+
+        // Request permission
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') {
+            console.warn('Notifications not granted');
+        } else {
+            try {
+                const token = await getToken(messaging, {
+                    vapidKey: "BCn3SGnu-RLyeGqPWn3030CcKz0JNtcGrOgUwJJOSrx5eBA3osW0n49GECPYR6novHwxi50saQmcFNPTAYQuogw",
+                    serviceWorkerRegistration: swReg
+                });
+                console.log('✅ FCM Token:', token);
+                alert('Your FCM Token:\n' + token);
+                // Optionally send to Node-RED via uibuilder
+                // uibuilder.send({ fcmToken: token })
+            } catch (err) {
+                console.error('Error getting FCM token', err);
+            }
+        }
+
+        // Foreground listener
+        onMessage(messaging, payload => {
+            console.log('[Foreground] Message received:', payload)
+            const d = payload.data || {}
+            const n = payload.notification || {}
+            const title = d.title || n.title || 'Notification'
+            const body  = d.body  || n.body  || ''
+            const image  = d.icon  || n.icon  || n.image || 'https://kartinkof.club/uploads/posts/2022-03/1648356653_2-kartinkof-club-p-mem-im-fine-3.png'
+
+            if (Notification.permission === 'granted') {
+                new Notification(title, {
+                    body, image,
+                    // keeps the toast visible long enough to notice
+                    requireInteraction: true,
+                    // prevents deduplication if you’re testing fast
+                    tag: String(Date.now()), renotify: true
+                })
+            }
+        });
+    </script>
 </body>
 </html>

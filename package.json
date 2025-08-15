@@ -16,7 +16,11 @@
     "eslint-plugin-jsdoc": "^51.3.1",
     "globals": "^16.1.0"
   },
-  "keywords": ["uibuilder", "node-red", "node-red-contrib-uibuilder"],
+  "keywords": [
+    "uibuilder",
+    "node-red",
+    "node-red-contrib-uibuilder"
+  ],
   "author": "Julian Knight (Totally Information)",
   "license": "Apache-2.0",
   "homepage": "https://github.com/TotallyInformation/node-red-contrib-uibuilder",
@@ -31,5 +35,8 @@
     "last 2 versions",
     "not dead",
     "not ie > 0"
-  ]
+  ],
+  "dependencies": {
+    "firebase": "^12.1.0"
+  }
 }
